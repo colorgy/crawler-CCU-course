@@ -41,7 +41,7 @@ class CcuCourseCrawler
       Minitar.unpack tgz, @dir_name
     end
 
-    @courses = Dir.glob("#{@dir_name}/*.html").map do |filename|
+    @courses = Dir.glob("#{@dir_name}/*.html").reject{|fn| fn.include?('index')}.map do |filename|
       puts filename
       document = Nokogiri::HTML(File.read(filename).force_encoding('utf-8'))
       if not document.css('h1').text.include?("#{@year-1911}學年度第#{@term}學期")
