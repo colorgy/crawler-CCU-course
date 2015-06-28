@@ -49,7 +49,7 @@ class CcuCourseCrawler
       Minitar.unpack tgz, @dir_name
     # end
 
-    @courses = Dir.glob("#{@dir_name}/*.html").reject{|fn| fn.include?('index')}.map do |filename|
+    Dir.glob("#{@dir_name}/*.html").reject{|fn| fn.include?('index')}.each do |filename|
       puts filename
       document = Nokogiri::HTML(File.read(filename).force_encoding('utf-8'))
       if not document.css('h1').text.include?("#{@year-1911}學年度第#{@term}學期")
@@ -58,16 +58,35 @@ class CcuCourseCrawler
         department = nil
         document.css('h1').text.match(/系所別\:\ (?<dep>.+)/) {|m| department = m[:dep]}
 
-        document.css('table tr:not(:first-child)').map do |row|
+        document.css('table tr:not(:first-child)').each do |row|
           datas = row.css('td')
-          times = nil
-          location = nil
 
-          # binding.pry
+          code = nil; name = nil; lecturer = nil; credits = nil; required = nil;
+          url = nil; times = nil; location = nil; group_code = nil;
 
-          times =  datas[8] && datas[8].text
-          location =  datas[9] && datas[9].text
-          group_code = datas[2] && datas[2].text
+          if department == '通識教育中心'
+            times =  datas[9] && datas[9].text
+            location =  datas[10] && datas[10].text
+            group_code = datas[3] && datas[3].text
+
+            code = datas[3] && "#{@year}-#{@term}-#{datas[2].text}-#{group_code}"
+            name = datas[4] && datas[4].text && datas[4].text.strip
+            lecturer = datas[5] && datas[5].text && datas[5].text.strip
+            credits = datas[7] && datas[7].text && datas[7].text.to_i
+            required = datas[8] && datas[8].text.include?('必')
+            url = datas[12] && datas[12].css('a')[0] && datas[12].css('a')[0][:href]
+          else
+            times =  datas[8] && datas[8].text
+            location =  datas[9] && datas[9].text
+            group_code = datas[2] && datas[2].text
+
+            code = datas[2] && "#{@year}-#{@term}-#{datas[1].text}-#{group_code}"
+            name = datas[3] && datas[3].text && datas[3].text.strip
+            lecturer = datas[4] && datas[4].text && datas[4].text.strip
+            credits = datas[6] && datas[6].text && datas[6].text.to_i
+            required = datas[7] && datas[7].text.include?('必')
+            url = datas[11] && datas[11].css('a')[0] && datas[11].css('a')[0][:href]
+          end
 
           course_days = []
           course_periods = []
@@ -86,14 +105,14 @@ class CcuCourseCrawler
           end
 
           course = {
-            code: datas[2] && "#{@year}-#{@term}-#{datas[1].text}-#{group_code}",
+            code: code,
             group_code: group_code,
-            name: datas[3] && datas[3].text && datas[3].text.strip,
-            lecturer: datas[4] && datas[4].text && datas[4].text.strip,
+            name: name,
+            lecturer: lecturer,
             department: department,
-            credits: datas[6] && datas[6].text && datas[6].text.to_i,
-            required: datas[7] && datas[7].text.include?('必'),
-            url: datas[11] && datas[11].css('a')[0] && datas[11].css('a')[0][:href],
+            credits: credits,
+            required: required,
+            url: url,
             day_1: course_days[0],
             day_2: course_days[1],
             day_3: course_days[2],
@@ -126,6 +145,7 @@ class CcuCourseCrawler
 
           @after_each_proc.call(course: course) if @after_each_proc
 
+          @courses << course
           # if not document.css('h1').text.include?('系所別: 通識教育中心')
           #   course[:grade] = datas[0] && datas[0].text
           #   course[:type] = datas[10] && datas[10].text
@@ -134,7 +154,7 @@ class CcuCourseCrawler
           course
         end # document.css('table tr:not(:first-child)').map
       end # if not document.css('h1').text.include?
-    end.inject { |arr, nxt| arr.concat nxt }
+    end # .inject { |arr, nxt| arr.concat nxt }
 
     @courses
   end
@@ -148,5 +168,5 @@ class CcuCourseCrawler
   end
 end
 
-# cc = CcuCourseCrawler.new(year: 2014, term: 1)
+# cc = CcuCourseCrawler.new(year: 2015, term: 1)
 # File.write('courses.json', JSON.pretty_generate(cc.courses))
