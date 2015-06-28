@@ -1,11 +1,13 @@
 require 'rubygems/package'
 require 'archive/tar/minitar'
 require 'zlib'
+
 require 'open-uri'
 require 'nokogiri'
 require 'pry'
 require 'json'
 
+require 'fileutils'
 
 class CcuCourseCrawler
   include Archive::Tar
@@ -27,19 +29,23 @@ class CcuCourseCrawler
     @update_progress_proc = update_progress
     @after_each_proc = after_each
 
-    @download_path = "http://kiki.ccu.edu.tw/~ccmisp06/Course/zipfiles/"
+    @download_path = "https://kiki.ccu.edu.tw/~ccmisp06/Course/zipfiles/"
     @filename = "#{@year-1911}#{@term}.tgz"
-    @dir_name = "#{@year-1911}#{@term}"
+    @file_path = File.join 'tmp', @filename
+    @dir_name = File.join 'tmp', "#{@year-1911}#{@term}"
   end
 
   def courses
     @courses = []
 
-    if not Dir.exist?(@dir_name)
-      File.write(@filename, open("#{@download_path}#{@filename}").read)
-      tgz = Zlib::GzipReader.open(@filename)
+    # if not Dir.exist?(@dir_name)
+      FileUtils.mkdir_p @dir_name
+
+      File.write(@file_path, open("#{@download_path}#{@filename}", {ssl_verify_mode: OpenSSL::SSL::VERIFY_NONE}).read)
+
+      tgz = Zlib::GzipReader.open(@file_path)
       Minitar.unpack tgz, @dir_name
-    end
+    # end
 
     @courses = Dir.glob("#{@dir_name}/*.html").reject{|fn| fn.include?('index')}.map do |filename|
       puts filename
@@ -67,10 +73,10 @@ class CcuCourseCrawler
 
           if times && location
             times.split(' ').each do |time|
-              time.match(/(?<d>[DAYS.keys.join])(?<p>.+)/) do |m|
+              time.match(/(?<d>[#{DAYS.keys.join}])(?<p>.+)/) do |m|
                 m[:p].split(',').each do |period|
                   course_days << DAYS[m[:d]]
-                  course_periods << period
+                  course_periods << period.to_i
                   course_locations << location
                 end
               end
@@ -116,6 +122,8 @@ class CcuCourseCrawler
             note: datas[13] && datas[13].text,
           }
 
+          @after_each_proc.call(course: course) if @after_each_proc
+
           # if not document.css('h1').text.include?('系所別: 通識教育中心')
           #   course[:grade] = datas[0] && datas[0].text
           #   course[:type] = datas[10] && datas[10].text
@@ -126,7 +134,7 @@ class CcuCourseCrawler
       end # if not document.css('h1').text.include?
     end.inject { |arr, nxt| arr.concat nxt }
 
-    File.write('courses.json', JSON.pretty_generate(@courses))
+    @courses
   end
 
   def current_year
@@ -138,5 +146,5 @@ class CcuCourseCrawler
   end
 end
 
-cc = CcuCourseCrawler.new(year: 2014, term: 1)
-cc.courses
+# cc = CcuCourseCrawler.new(year: 2014, term: 1)
+# File.write('courses.json', JSON.pretty_generate(cc.courses))
