@@ -7,6 +7,8 @@ require 'nokogiri'
 require 'pry'
 require 'json'
 
+require 'crawler_rocks'
+
 require 'fileutils'
 
 class CcuCourseCrawler
