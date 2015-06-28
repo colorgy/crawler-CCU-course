@@ -11,6 +11,9 @@ require 'crawler_rocks'
 
 require 'fileutils'
 
+require 'thwait'
+require 'thread'
+
 class CcuCourseCrawler
   include Archive::Tar
 
@@ -39,6 +42,7 @@ class CcuCourseCrawler
 
   def courses
     @courses = []
+    @threads = []
 
     # if not Dir.exist?(@dir_name)
       FileUtils.mkdir_p @dir_name
@@ -59,102 +63,109 @@ class CcuCourseCrawler
         document.css('h1').text.match(/系所別\:\ (?<dep>.+)/) {|m| department = m[:dep]}
 
         document.css('table tr:not(:first-child)').each do |row|
-          datas = row.css('td')
+          sleep(1) until (
+            @threads.delete_if { |t| !t.status };  # remove dead (ended) threads
+            @threads.count < (ENV['MAX_THREADS'] || 10)
+          )
+          @threads << Thread.new do
+            datas = row.css('td')
 
-          code = nil; name = nil; lecturer = nil; credits = nil; required = nil;
-          url = nil; times = nil; location = nil; group_code = nil;
+            code = nil; name = nil; lecturer = nil; credits = nil; required = nil;
+            url = nil; times = nil; location = nil; group_code = nil;
 
-          if department == '通識教育中心'
-            times =  datas[9] && datas[9].text
-            location =  datas[10] && datas[10].text
-            group_code = datas[3] && datas[3].text
+            if department == '通識教育中心'
+              times =  datas[9] && datas[9].text
+              location =  datas[10] && datas[10].text
+              group_code = datas[3] && datas[3].text
 
-            code = datas[3] && "#{@year}-#{@term}-#{datas[2].text}-#{group_code}"
-            name = datas[4] && datas[4].text && datas[4].text.strip
-            lecturer = datas[5] && datas[5].text && datas[5].text.strip
-            credits = datas[7] && datas[7].text && datas[7].text.to_i
-            required = datas[8] && datas[8].text.include?('必')
-            url = datas[12] && datas[12].css('a')[0] && datas[12].css('a')[0][:href]
-          else
-            times =  datas[8] && datas[8].text
-            location =  datas[9] && datas[9].text
-            group_code = datas[2] && datas[2].text
+              code = datas[3] && "#{@year}-#{@term}-#{datas[2].text}-#{group_code}"
+              name = datas[4] && datas[4].text && datas[4].text.strip
+              lecturer = datas[5] && datas[5].text && datas[5].text.strip
+              credits = datas[7] && datas[7].text && datas[7].text.to_i
+              required = datas[8] && datas[8].text.include?('必')
+              url = datas[12] && datas[12].css('a')[0] && datas[12].css('a')[0][:href]
+            else
+              times =  datas[8] && datas[8].text
+              location =  datas[9] && datas[9].text
+              group_code = datas[2] && datas[2].text
 
-            code = datas[2] && "#{@year}-#{@term}-#{datas[1].text}-#{group_code}"
-            name = datas[3] && datas[3].text && datas[3].text.strip
-            lecturer = datas[4] && datas[4].text && datas[4].text.strip
-            credits = datas[6] && datas[6].text && datas[6].text.to_i
-            required = datas[7] && datas[7].text.include?('必')
-            url = datas[11] && datas[11].css('a')[0] && datas[11].css('a')[0][:href]
-          end
+              code = datas[2] && "#{@year}-#{@term}-#{datas[1].text}-#{group_code}"
+              name = datas[3] && datas[3].text && datas[3].text.strip
+              lecturer = datas[4] && datas[4].text && datas[4].text.strip
+              credits = datas[6] && datas[6].text && datas[6].text.to_i
+              required = datas[7] && datas[7].text.include?('必')
+              url = datas[11] && datas[11].css('a')[0] && datas[11].css('a')[0][:href]
+            end
 
-          course_days = []
-          course_periods = []
-          course_locations = []
+            course_days = []
+            course_periods = []
+            course_locations = []
 
-          if times && location
-            times.split(' ').each do |time|
-              time.match(/(?<d>[#{DAYS.keys.join}])(?<p>.+)/) do |m|
-                m[:p].split(',').each do |period|
-                  course_days << DAYS[m[:d]]
-                  course_periods << period.to_i
-                  course_locations << location
+            if times && location
+              times.split(' ').each do |time|
+                time.match(/(?<d>[#{DAYS.keys.join}])(?<p>.+)/) do |m|
+                  m[:p].split(',').each do |period|
+                    course_days << DAYS[m[:d]]
+                    course_periods << period.to_i
+                    course_locations << location
+                  end
                 end
               end
             end
-          end
 
-          course = {
-            code: code,
-            group_code: group_code,
-            name: name,
-            lecturer: lecturer,
-            department: department,
-            credits: credits,
-            required: required,
-            url: url,
-            day_1: course_days[0],
-            day_2: course_days[1],
-            day_3: course_days[2],
-            day_4: course_days[3],
-            day_5: course_days[4],
-            day_6: course_days[5],
-            day_7: course_days[6],
-            day_8: course_days[7],
-            day_9: course_days[8],
-            period_1: course_periods[0],
-            period_2: course_periods[1],
-            period_3: course_periods[2],
-            period_4: course_periods[3],
-            period_5: course_periods[4],
-            period_6: course_periods[5],
-            period_7: course_periods[6],
-            period_8: course_periods[7],
-            period_9: course_periods[8],
-            location_1: course_locations[0],
-            location_2: course_locations[1],
-            location_3: course_locations[2],
-            location_4: course_locations[3],
-            location_5: course_locations[4],
-            location_6: course_locations[5],
-            location_7: course_locations[6],
-            location_8: course_locations[7],
-            location_9: course_locations[8],
-            note: datas[13] && datas[13].text,
-          }
+            course = {
+              code: code,
+              group_code: group_code,
+              name: name,
+              lecturer: lecturer,
+              department: department,
+              credits: credits,
+              required: required,
+              url: url,
+              day_1: course_days[0],
+              day_2: course_days[1],
+              day_3: course_days[2],
+              day_4: course_days[3],
+              day_5: course_days[4],
+              day_6: course_days[5],
+              day_7: course_days[6],
+              day_8: course_days[7],
+              day_9: course_days[8],
+              period_1: course_periods[0],
+              period_2: course_periods[1],
+              period_3: course_periods[2],
+              period_4: course_periods[3],
+              period_5: course_periods[4],
+              period_6: course_periods[5],
+              period_7: course_periods[6],
+              period_8: course_periods[7],
+              period_9: course_periods[8],
+              location_1: course_locations[0],
+              location_2: course_locations[1],
+              location_3: course_locations[2],
+              location_4: course_locations[3],
+              location_5: course_locations[4],
+              location_6: course_locations[5],
+              location_7: course_locations[6],
+              location_8: course_locations[7],
+              location_9: course_locations[8],
+              note: datas[13] && datas[13].text,
+            }
 
-          @after_each_proc.call(course: course) if @after_each_proc
+            @after_each_proc.call(course: course) if @after_each_proc
 
-          @courses << course
-          # if not document.css('h1').text.include?('系所別: 通識教育中心')
-          #   course[:grade] = datas[0] && datas[0].text
-          #   course[:type] = datas[10] && datas[10].text
-          # end
+            @courses << course
+            # if not document.css('h1').text.include?('系所別: 通識教育中心')
+            #   course[:grade] = datas[0] && datas[0].text
+            #   course[:type] = datas[10] && datas[10].text
+            # end
 
-          course
+            course
+          end # end Thread
         end # document.css('table tr:not(:first-child)').map
       end # if not document.css('h1').text.include?
     end # .inject { |arr, nxt| arr.concat nxt }
+    ThreadsWait.all_waits(*@threads)
 
     @courses
   end
