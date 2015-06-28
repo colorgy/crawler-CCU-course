@@ -65,7 +65,7 @@ class CcuCourseCrawler
         document.css('table tr:not(:first-child)').each do |row|
           sleep(1) until (
             @threads.delete_if { |t| !t.status };  # remove dead (ended) threads
-            @threads.count < (ENV['MAX_THREADS'] || 10)
+            @threads.count < (ENV['MAX_THREADS'] || 20)
           )
           @threads << Thread.new do
             datas = row.css('td')
@@ -114,6 +114,8 @@ class CcuCourseCrawler
             end
 
             course = {
+              year: @year,
+              term: @term,
               code: code,
               group_code: group_code,
               name: name,

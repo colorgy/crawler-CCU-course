@@ -3,3 +3,4 @@ deprecated
 *.tgz
 *.json
 tmp
+.env
